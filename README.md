@@ -21,7 +21,7 @@ cp .env .env.local  # or edit .env directly
 ### `.env` essentials
 ```
 # Domain + index
-DOMAIN_URL=https://arxiv.org/list/cs/recent?show=2000
+DOMAIN_URL=https://arxiv.org/list/cs/recent?show=2000, https://arxiv.org/list/physics/recent?show=1000
 INDEX_NAME=rag-domain-expert-2025
 
 # API keys

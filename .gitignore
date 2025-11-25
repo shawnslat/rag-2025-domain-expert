@@ -42,3 +42,4 @@ logs/
 # Temporary files
 *.tmp
 .cache/
+storage/docstore.json

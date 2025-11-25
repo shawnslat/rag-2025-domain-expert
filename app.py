@@ -268,7 +268,9 @@ if prompt := st.chat_input("Ask about the knowledge base…"):
         # CREATES: Assistant chat bubble
         
         # Execute RAG pipeline
+        start_time = time.time()
         bundle: QueryResponseBundle = query_engine(prompt)
+        latency_ms = (time.time() - start_time) * 1000
         # DURATION: 1.5-3.5 seconds
         # RETURNS: Complete response bundle with metadata
         # COMPONENTS:
@@ -281,6 +283,17 @@ if prompt := st.chat_input("Ask about the knowledge base…"):
         response = bundle.response
         # EXTRACTS: Response object from bundle
         
+        logger.info(
+            "Query completed",
+            extra={
+                "latency_ms": latency_ms,
+                "avg_score": bundle.avg_score,
+                "low_confidence": bundle.low_confidence,
+                "source_count": len(response.source_nodes),
+            },
+        )
+        if os.getenv("DEBUG"):
+            st.caption(f"⚡ {latency_ms:.0f}ms | Confidence: {bundle.avg_score:.2f}")
         
         # ====================================================================
         # STREAMING DISPLAY
@@ -430,9 +443,18 @@ if prompt := st.chat_input("Ask about the knowledge base…"):
         # ====================================================================
         
         # Combine answer and web fallback (if present)
-        assistant_content = full
-        if bundle.fallback_answer:
-            assistant_content = f"{full}\n\n---\n**Live web update**\n{bundle.fallback_answer}"
+        internal_text = full.strip()
+        fallback_text = (bundle.fallback_answer or "").strip()
+
+        if fallback_text and (not internal_text or bundle.avg_score == 0.0):
+            # No useful internal answer → show only web answer
+            assistant_content = f"**Live web update**\n\n{fallback_text}"
+        elif fallback_text:
+            # Show both, separated
+            assistant_content = f"{internal_text}\n\n---\n**Live web update**\n{fallback_text}"
+        else:
+            # Only internal answer or friendly fallback
+            assistant_content = internal_text or "_I couldn’t find anything for that in the current knowledge base._"
             # SEPARATOR: Horizontal rule (---) for visual break
     
     # Add assistant message to history
@@ -513,6 +535,20 @@ with st.sidebar:
     
     
     # ========================================================================
+    # ADD NEW DOMAIN (INFO-ONLY CTA)
+    # ========================================================================
+    
+    st.divider()
+    new_url = st.text_input("Add new knowledge source (URL or sitemap)")
+    if st.button("Ingest new domain"):
+        st.info(f"Run locally to ingest: DOMAIN_URL={new_url} python ingest.py")
+    st.caption(
+        "Examples: arXiv CS/physics, HuggingFace papers, Lilian Weng blog, "
+        "HN, Interconnects, Latent Space, SeriousEats recipes, Vatican archives, "
+        "Quran, Stanford Encyclopedia, LessWrong sitemaps."
+    )
+    
+    # ========================================================================
     # ABOUT THE AUTHOR
     # ========================================================================
     
@@ -550,102 +586,14 @@ with st.sidebar:
 # ============================================================================
 
 if st.session_state.get("analytics_opt_in"):
-    # ONLY IF: User explicitly opted in
-    
     st.markdown(
         """
         <script async defer data-website-id="umami-placeholder" src="https://analytics.example.com/script.js"></script>
         """,
         unsafe_allow_html=True,
     )
-    # UMAMI: Privacy-focused analytics (GDPR compliant)
-    # ALTERNATIVE: Google Analytics, Plausible, Fathom
-    # TODO: Replace placeholder with real Umami site ID
-
-
-# ============================================================================
-# STREAMLIT-SPECIFIC NOTES
-# ============================================================================
-
-"""
-STREAMLIT EXECUTION MODEL:
---------------------------
-Streamlit reruns entire script on every user interaction:
-- Button click → Full rerun
-- Text input → Full rerun  
-- Slider change → Full rerun
-
-Optimizations:
-1. Session state for persistence
-2. @st.cache_data for expensive computations
-3. st.empty() for efficient updates
-
-DEPLOYMENT CHECKLIST:
----------------------
-1. Test locally: streamlit run app.py
-2. Push to GitHub (public or private)
-3. Connect at share.streamlit.io
-4. Add secrets in dashboard:
-   - GROQ_API_KEY
-   - PINECONE_API_KEY
-   - FIRECRAWL_API_KEY
-   - NOMIC_API_KEY
-5. Deploy! (auto-updates on git push)
-
-COMMON ISSUES:
---------------
-1. "Module not found"
-   → Add to requirements.txt
-   
-2. "Session state lost"
-   → Check for st.rerun() or form submissions
-   
-3. "Slow performance"
-   → Use st.cache_data for model loading
-   
-4. "Rate limit errors"
-   → Increase cooldown in rate limiting code
-   
-5. "Memory errors"
-   → Reduce batch sizes, use smaller models
-
-CUSTOMIZATION IDEAS:
---------------------
-1. Add file upload (PDF, DOCX)
-2. Add voice input (speech-to-text)
-3. Add export to PDF
-4. Add conversation export
-5. Add multi-language support
-6. Add dark mode toggle
-7. Add custom CSS themes
-8. Add A/B testing for prompts
-"""
 
 
 # ============================================================================
 # PERFORMANCE MONITORING (OPTIONAL)
 # ============================================================================
-
-"""
-Add this after query_engine() call to track performance:
-
-import time
-start = time.time()
-bundle = query_engine(prompt)
-latency_ms = (time.time() - start) * 1000
-
-# Log to monitoring service
-logger.info(
-    "Query completed",
-    extra={
-        "latency_ms": latency_ms,
-        "avg_score": bundle.avg_score,
-        "low_confidence": bundle.low_confidence,
-        "source_count": len(response.source_nodes),
-    }
-)
-
-# Display to user (dev mode only)
-if os.getenv("DEBUG"):
-    st.caption(f"⚡ {latency_ms:.0f}ms | Confidence: {bundle.avg_score:.2f}")
-"""

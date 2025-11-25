@@ -512,6 +512,7 @@ def load_local_docs(data_dir: Path) -> list[Document]:
 
 def crawl(
     firecrawl_client: Firecrawl,
+    start_url: str,
     total_pages: Optional[int],
     page_size: int,
     crawl_timeout: int,
@@ -584,7 +585,7 @@ def crawl(
     # exist_ok=True: Don't error if already exists
 
     docs: list[Document] = []  # Accumulator for results
-    start_url = settings.domain_url.rstrip("/")  # Remove trailing slash
+    start_url = start_url.rstrip("/")  # Remove trailing slash
     # WHY rstrip("/")?:
     # "https://example.com/" → "https://example.com"
     # Firecrawl prefers URLs without trailing slash
@@ -724,6 +725,8 @@ def crawl(
         # Skip pages with little content
         if not md or len(md) < 200:
             continue
+        if "streamlit" in md.lower():
+            continue
         # THRESHOLD: 200 chars minimum (filters out empty/stub pages)
         
         # Extract metadata safely
@@ -743,6 +746,8 @@ def crawl(
             metadata.get("sourceUrl") or  # Alternate key name
             start_url  # Last resort fallback
         )
+        if str(source_url).lower().endswith(".md"):
+            continue
         title = metadata.get("title") or "Untitled"
         
         # Create LlamaIndex Document object
@@ -863,14 +868,20 @@ def run(
         # Initialize Firecrawl client
         firecrawl_client = Firecrawl(api_key=settings.firecrawl_api_key)
         # CREATES: HTTP client with authentication
-        
-        docs = crawl(
-            firecrawl_client,
-            total_pages=total_pages,
-            page_size=page_size,
-            crawl_timeout=crawl_timeout,
-            poll_interval=poll_interval,
-        )
+
+        docs = []
+        domain_urls = [u.strip() for u in settings.domain_url.split(",") if u.strip()]
+        for url in domain_urls:
+            docs.extend(
+                crawl(
+                    firecrawl_client,
+                    start_url=url,
+                    total_pages=total_pages,
+                    page_size=page_size,
+                    crawl_timeout=crawl_timeout,
+                    poll_interval=poll_interval,
+                )
+            )
         # DURATION: 2-30 minutes depending on site size
         # OUTPUT: List of Document objects
     
@@ -932,11 +943,7 @@ def run(
     
     # Try each batch size in descending order
     for batch_size in settings.embed_batch_sizes:
-        Settings.embed_model = NomicEmbedding(
-            model_name=settings.embedding_model,
-            api_key=settings.nomic_api_key,        # <-- This MUST be here
-            embed_batch_size=batch_size,
-        )
+        Settings.embed_model = _build_embed_model(batch_size)
         # BATCH SIZE: How many chunks to embed in parallel
         # TRADE-OFF:
         # - Larger batch (64): Faster, but more likely to hit rate limits
