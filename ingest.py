@@ -932,9 +932,9 @@ def run(
     for batch_size in settings.embed_batch_sizes:  # Default: [64, 32, 16, 8]
         # Configure embedding model with current batch size
         Settings.embed_model = NomicEmbedding(
-            model_name=settings.embedding_model,
-            embed_batch_size=batch_size,
-        )
+          model_name="nomic-embed-text-v1.5",
+          api_key=settings.nomic_api_key   # ← this line fixes it
+            )
         # BATCH SIZE: How many chunks to embed in parallel
         # TRADE-OFF:
         # - Larger batch (64): Faster, but more likely to hit rate limits
