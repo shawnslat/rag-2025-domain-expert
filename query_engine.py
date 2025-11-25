@@ -76,6 +76,14 @@ from pinecone import Pinecone
 from config import settings
 from utils import generate_hypothetical_answer, fetch_live_web_results
 
+import os
+os.environ["NOMIC_API_KEY"] = settings.nomic_api_key
+
+Settings.embed_model = NomicEmbedding(
+    model_name="nomic-embed-text-v1.5",
+    api_key=settings.nomic_api_key
+)
+
 # ============================================================================
 # LOGGING CONFIGURATION
 # ============================================================================

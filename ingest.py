@@ -98,6 +98,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from typing import Optional
 
 import argparse
@@ -930,16 +931,12 @@ def run(
     errors: list[Exception] = []  # Track failed attempts
     
     # Try each batch size in descending order
-    for batch_size in settings.embed_batch_sizes:  # Default: [64, 32, 16, 8]
-        # Configure embedding model with current batch size
-<<<<<<< HEAD
+    for batch_size in settings.embed_batch_sizes:
         Settings.embed_model = NomicEmbedding(
-          model_name="nomic-embed-text-v1.5",
-          api_key=settings.nomic_api_key   # ← this line fixes it
-            )
-=======
-        Settings.embed_model = _build_embed_model(batch_size)
->>>>>>> d83bed4 (updated config and ingest)
+            model_name=settings.embedding_model,
+            api_key=settings.nomic_api_key,        # <-- This MUST be here
+            embed_batch_size=batch_size,
+        )
         # BATCH SIZE: How many chunks to embed in parallel
         # TRADE-OFF:
         # - Larger batch (64): Faster, but more likely to hit rate limits
