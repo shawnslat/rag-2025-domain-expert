@@ -34,15 +34,6 @@ dist/
 Thumbs.db
 
 # Data files (can be large)
-data/crawled_pages.jsonl
-data/arxiv_cs_recent_*.md
-data/*.pdf
-
-# Local storage (recreate on each machine)
-storage/*.json
-storage/docstore.json
-storage/graph_store.json
-storage/index_store.json
 
 # Logs
 *.log
