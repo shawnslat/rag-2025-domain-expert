@@ -88,6 +88,10 @@ class Settings:
     # FORMAT: "pcsk_..." for serverless, "xxxx-xxxx-xxxx" for pod-based
     # WHERE TO GET: https://app.pinecone.io -> API Keys
     # CRITICAL: Without this, vector storage won't work
+
+    nomic_api_key: str = os.getenv("NOMIC_API_KEY", "").strip()
+    # USAGE: ingest/query embedding calls when using Nomic embeddings
+    # NOTE: On Streamlit Cloud, set via secrets; no interactive `nomic login`.
     
     firecrawl_api_key: str = os.getenv("FIRECRAWL_API_KEY", "").strip()
     # USAGE: ingest.py line 180 - Initialize Firecrawl crawler

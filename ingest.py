@@ -386,6 +386,7 @@ def _build_embed_model(batch_size: int):
         return NomicEmbedding(
             model_name=settings.embedding_model,
             embed_batch_size=batch_size,
+            api_key=settings.nomic_api_key,
         )
     return HuggingFaceEmbedding(
         model_name=settings.embedding_model,
@@ -931,10 +932,14 @@ def run(
     # Try each batch size in descending order
     for batch_size in settings.embed_batch_sizes:  # Default: [64, 32, 16, 8]
         # Configure embedding model with current batch size
+<<<<<<< HEAD
         Settings.embed_model = NomicEmbedding(
           model_name="nomic-embed-text-v1.5",
           api_key=settings.nomic_api_key   # ← this line fixes it
             )
+=======
+        Settings.embed_model = _build_embed_model(batch_size)
+>>>>>>> d83bed4 (updated config and ingest)
         # BATCH SIZE: How many chunks to embed in parallel
         # TRADE-OFF:
         # - Larger batch (64): Faster, but more likely to hit rate limits

@@ -34,6 +34,7 @@ TAVILY_API_KEY=...                 # optional web fallback
 # Models / params
 EMBEDDING_MODEL=nomic-embed-text-v1.5
 EMBEDDING_DIM=768                 # match your embedding model
+NOMIC_API_KEY=...                 # required if using Nomic embeddings
 LLM_MODEL=llama-3.3-70b-versatile   # update if Groq deprecates
 RERANKER_MODEL=mixedbread-ai/mxbai-rerank-base-v1
 CHUNK_SIZE=768
