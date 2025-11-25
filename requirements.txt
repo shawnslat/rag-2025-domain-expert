@@ -1,0 +1,13 @@
+llama-index==0.14.8
+llama-index-embeddings-nomic==0.7.1
+llama-index-embeddings-huggingface==0.6.1
+llama-index-vector-stores-pinecone==0.7.1
+llama-index-llms-groq==0.4.1
+firecrawl-py==4.8.0
+streamlit==1.38.0
+python-dotenv==1.0.1
+pinecone==7.3.0
+tqdm==4.66.5
+typer[all]==0.12.5
+requests>=2.32.0
+tenacity>=8.2.3
