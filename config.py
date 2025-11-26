@@ -104,13 +104,16 @@ class Settings:
     # ============================================================================
     
     domain_url: str = os.getenv("DOMAIN_URL", "https://arxiv.org/list/cs/recent")
-    # USAGE: ingest.py line 104 - Starting point for web crawl
+    # USAGE: ingest.py - Starting point(s) for web crawl
     # DEFAULT: arXiv computer science recent papers (2000+ papers)
-    # ALTERNATIVES: 
+    # MULTI-DOMAIN SUPPORT: Comma-separated URLs
+    # EXAMPLE:
+    #   DOMAIN_URL=https://arxiv.org/list/cs/recent,https://www.seriouseats.com/sitemap.xml
+    # ALTERNATIVES:
     #   - Company docs: "https://docs.yourcompany.com"
     #   - Blog: "https://yourblog.com/articles"
     #   - Knowledge base: "https://help.yourproduct.com"
-    # NOTE: Firecrawl will follow links from this starting page
+    # NOTE: Each domain will be crawled sequentially and indexed together
     
     index_name: str = os.getenv("INDEX_NAME", "rag-2025-nov18")
     # USAGE: 
@@ -180,16 +183,19 @@ class Settings:
     # RULE OF THUMB: 10-20% of chunk_size (100/768 = 13%)
     
     similarity_cutoff: float = float(os.getenv("SIMILARITY_CUTOFF", "0.77"))
-    # USAGE: query_engine.py line 51 - Filter low-relevance chunks
+    # USAGE:
+    #   - query_engine.py line 262 - Filter low-relevance chunks
+    #   - query_engine.py line 375 - Early-exit threshold for out-of-domain queries
     # RANGE: 0.0 (unrelated) to 1.0 (identical)
     # INTERPRETATION:
     #   - 0.9+: Very similar, almost exact match
     #   - 0.77: Moderately similar (current setting)
     #   - 0.6-0.7: Weakly similar, may include noise
-    # TUNING: 
+    # TUNING:
     #   - Increase (0.8-0.85) if getting too many irrelevant results
     #   - Decrease (0.7-0.75) if missing relevant results
     # DOMAIN DEPENDENT: Technical jargon needs lower threshold
+    # EARLY-EXIT OPTIMIZATION: If pre-check score < this, skip HyDE and go to web
     
     confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.80"))
     # USAGE: query_engine.py line 87 - Trigger web fallback

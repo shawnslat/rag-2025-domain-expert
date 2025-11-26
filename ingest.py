@@ -869,21 +869,36 @@ def run(
         firecrawl_client = Firecrawl(api_key=settings.firecrawl_api_key)
         # CREATES: HTTP client with authentication
 
+        # Parse domain URLs (supports comma-separated multi-domain)
         docs = []
         domain_urls = [u.strip() for u in settings.domain_url.split(",") if u.strip()]
-        for url in domain_urls:
-            docs.extend(
-                crawl(
-                    firecrawl_client,
-                    start_url=url,
-                    total_pages=total_pages,
-                    page_size=page_size,
-                    crawl_timeout=crawl_timeout,
-                    poll_interval=poll_interval,
-                )
+
+        if len(domain_urls) > 1:
+            typer.secho(f"🌐 Multi-domain mode: Will crawl {len(domain_urls)} domains sequentially", fg="cyan")
+            for i, url in enumerate(domain_urls, 1):
+                typer.secho(f"  {i}. {url}", fg="cyan")
+
+        # Crawl each domain sequentially
+        for idx, url in enumerate(domain_urls, 1):
+            if len(domain_urls) > 1:
+                typer.secho(f"\n📥 Crawling domain {idx}/{len(domain_urls)}: {url}", fg="yellow", bold=True)
+
+            domain_docs = crawl(
+                firecrawl_client,
+                start_url=url,
+                total_pages=total_pages,
+                page_size=page_size,
+                crawl_timeout=crawl_timeout,
+                poll_interval=poll_interval,
             )
+
+            docs.extend(domain_docs)
+
+            if len(domain_urls) > 1:
+                typer.secho(f"✅ Domain {idx} complete: {len(domain_docs)} pages crawled", fg="green")
+
         # DURATION: 2-30 minutes depending on site size
-        # OUTPUT: List of Document objects
+        # OUTPUT: List of Document objects from ALL domains
     
     if not docs:
         typer.secho("No documents retrieved – check DOMAIN_URL or local data folder", fg="red")

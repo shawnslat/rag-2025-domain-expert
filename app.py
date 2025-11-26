@@ -71,12 +71,21 @@ CALLED BY:
 
 import os
 import time
+import logging
 from datetime import datetime
 
 import streamlit as st
 
 from config import settings
 from query_engine import QueryResponseBundle, query_engine
+
+# Basic logging for Streamlit reruns
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -190,11 +199,12 @@ if "last_query_ts" not in st.session_state:
     # PURPOSE: Rate limiting (prevent spam)
     # RESET: On page refresh
 
-if "analytics_opt_in" not in st.session_state:
-    st.session_state.analytics_opt_in = False
-    # STORES: User consent for analytics
-    # PURPOSE: Privacy compliance (GDPR-friendly)
-    # DEFAULT: False (opt-in, not opt-out)
+if "query_times" not in st.session_state:
+    st.session_state.query_times = []  # recent query timestamps (seconds)
+
+if "latest_avg_score" not in st.session_state:
+    st.session_state.latest_avg_score = None
+
 
 
 # ============================================================================
@@ -231,19 +241,21 @@ if prompt := st.chat_input("Ask about the knowledge base…"):
     # prompt = st.chat_input(...)
     # if prompt: ...
     
-    # Check rate limit (5-second cooldown)
-    now = time.time()  # Current Unix timestamp
-    if now - st.session_state.last_query_ts < 5:
-        # TOO FAST: Less than 5 seconds since last query
-        st.warning("Taking a breather—please wait a few seconds between questions.")
-        # USER FEEDBACK: Friendly message, not harsh error
-        
+    # Check rate limit (10s cooldown + 6/min cap)
+    now = time.time()
+    last_minute = [t for t in st.session_state.query_times if now - t < 60]
+    st.session_state.query_times = last_minute
+
+    if last_minute and (now - last_minute[-1] < 10):
+        st.warning("Taking a breather—please wait ~10 seconds between questions.")
         st.stop()
-        # HALT: Don't process query
-        # PREVENTS: API rate limits, abuse, high costs
-    
-    # Update timestamp (rate limit passed)
+    if len(last_minute) >= 6:
+        st.warning("Rate limit: too many queries this minute. Try again shortly.")
+        st.stop()
+
+    # Update timestamps (rate limit passed)
     st.session_state.last_query_ts = now
+    st.session_state.query_times.append(now)
     
     
     # ========================================================================
@@ -292,112 +304,78 @@ if prompt := st.chat_input("Ask about the knowledge base…"):
                 "source_count": len(response.source_nodes),
             },
         )
+        st.session_state.latest_avg_score = bundle.avg_score
         if os.getenv("DEBUG"):
             st.caption(f"⚡ {latency_ms:.0f}ms | Confidence: {bundle.avg_score:.2f}")
         
         # ====================================================================
-        # STREAMING DISPLAY
+        # RESPONSE DISPLAY (Fake streaming for UX)
         # ====================================================================
-        
+
+        # Determine which answer to show
+        # LOGIC: If we have a web fallback and low confidence, prefer web answer
+        if bundle.fallback_answer and bundle.avg_score < settings.confidence_threshold:
+            # Case 1: Low confidence (< 0.80) + web fallback available
+            # Show ONLY web answer (internal answer is unreliable)
+            full = bundle.fallback_answer
+            show_internal_sources = False
+        else:
+            # Case 2: Good confidence (≥ 0.80) OR no web fallback
+            # Show internal answer only
+            full = response.response
+            show_internal_sources = True
+
+        # Fake streaming for better UX (simulate typing effect)
         placeholder = st.empty()
-        # CREATES: Empty container that we'll update
-        # PURPOSE: Single element we can modify repeatedly
-        
-        full = ""  # Accumulator for complete response
-        
-        for chunk in response.response_gen:
-            # ITERATOR: Generator that yields text chunks
-            # YIELDS: Individual tokens or small phrases
-            # RATE: ~50-100 tokens/second from Groq
-            
-            full += chunk  # Append to accumulator
-            placeholder.markdown(full + "▌")  # Show with cursor
-            # CURSOR: "▌" indicates typing in progress
-            # UPDATE: Streamlit efficiently re-renders same element
-        
+        words = full.split()
+        displayed = ""
+
+        for i, word in enumerate(words):
+            displayed += word + " "
+            if i % 5 == 0:  # Update every 5 words for smooth animation
+                placeholder.markdown(displayed + "▌")
+                time.sleep(0.05)  # 50ms delay (appears to type ~200 words/min)
+
         placeholder.markdown(full)  # Final text without cursor
-        # CLEANUP: Remove typing indicator
-        
-        
+
+
         # ====================================================================
-        # SOURCE CITATION
+        # SOURCE CITATION (Collapsible)
         # ====================================================================
-        
+
         # Extract URLs from source nodes
         sources = [
-            f"[{i+1}]({n.metadata.get('source_url','')})" 
+            f"[{i+1}]({n.metadata.get('source_url','')})"
             for i, n in enumerate(response.source_nodes[:7])  # Top 7 only
             if n.metadata.get("source_url")  # Skip if missing URL
         ]
         # FORMAT: [1](url) [2](url) [3](url)
         # CLICKABLE: Markdown links
         # LIMIT: 7 sources (keeps UI clean)
-        
-        if sources:
-            # DISPLAY: Only if we have sources
-            st.caption("Sources: " + " • ".join(sources))
-            # CAPTION: Small text, de-emphasized
-            # SEPARATOR: Bullet points for readability
-        
-        
-        # ====================================================================
-        # CONFIDENCE WARNING
-        # ====================================================================
-        
-        if bundle.low_confidence:
-            # THRESHOLD: avg_score < 0.80 (configurable)
-            
-            if bundle.fallback_results:
-                # Case 1: Web search succeeded
-                warning_msg = (
-                    f"⚠️ Low confidence on internal docs (avg score {bundle.avg_score:.2f}). "
-                    "Pulling in live context…"
-                )
-                # TRANSPARENT: Show exact score
-                # EXPLANATION: Why we're using web search
-            else:
-                # Case 2: Web search disabled or failed
-                warning_msg = (
-                    "⚠️ Low confidence on internal docs. "
-                    "You may need to re-ingest or broaden the crawl."
-                )
-                # ACTIONABLE: Suggests fix
-            
-            st.warning(warning_msg)
-            # WARNING STYLE: Yellow box, attention-grabbing
+
+        if sources and show_internal_sources:
+            # DISPLAY: Collapsible dropdown for cleaner UI
+            with st.expander("📚 View Sources", expanded=False):
+                st.markdown(" • ".join(sources))
+                # SEPARATOR: Bullet points for readability
         
         
         # ====================================================================
-        # WEB FALLBACK DISPLAY
+        # WEB SOURCES (Only if web answer was used)
         # ====================================================================
-        
-        if bundle.fallback_answer:
-            # PRESENT: Only if web search was triggered
-            
-            st.markdown("#### Live Web Update")
-            # SECTION HEADER: Clearly separates web content
-            
-            st.markdown(bundle.fallback_answer)
-            # CONTENT: LLM synthesis of web search results
-            
-            if bundle.fallback_results:
-                # METADATA: Individual search results
-                st.caption("Fresh sources")
-                # LABEL: Distinguish from internal sources
-                
+
+        # If we showed the web answer above, display its sources for transparency
+        if bundle.fallback_answer and not show_internal_sources and bundle.fallback_results:
+            with st.expander("🔗 Web Sources", expanded=False):
                 for item in bundle.fallback_results:
-                    # ITERATE: Each web search result
                     title = item.get("title") or "Result"
                     url = item.get("url") or ""
                     summary = item.get("content") or ""
-                    
-                    # Truncate long summaries
+
                     summary_truncated = summary[:220]
                     ellipsis = '…' if len(summary) > 220 else ''
-                    
+
                     st.markdown(f"- [{title}]({url}) — {summary_truncated}{ellipsis}")
-                    # FORMAT: Bullet list of clickable links
-                    # TRUNCATED: 220 chars (about 2 lines)
         
         
         # ====================================================================
@@ -521,6 +499,22 @@ with st.sidebar:
     st.write(f"**Index:** `{settings.index_name}`")
     # SHOWS: Pinecone index name
     # FORMAT: Code style for technical accuracy
+
+    # Usage stats
+    now = time.time()
+    last_minute = [t for t in st.session_state.query_times if now - t < 60]
+    st.caption(
+        f"Queries this session: {len(st.session_state.query_times)}\n\n"
+        f"Queries last minute: {len(last_minute)}\n\n"
+        f"Seconds since last: {int(now - st.session_state.last_query_ts) if st.session_state.last_query_ts else 'n/a'}"
+    )
+
+    # Confidence indicator
+    if st.session_state.latest_avg_score is not None:
+        if st.session_state.latest_avg_score >= settings.confidence_threshold:
+            st.success(f"Internal Doc Confidence: {st.session_state.latest_avg_score:.2f}", icon="🟢")
+        else:
+            st.warning(f"Internal Doc Confidence: {st.session_state.latest_avg_score:.2f}", icon="🟡")
     
     
     # ========================================================================
@@ -533,20 +527,6 @@ with st.sidebar:
     # CTA: Encourages others to deploy
     # VALUE: Shows accessibility (free deployment)
     
-    
-    # ========================================================================
-    # ADD NEW DOMAIN (INFO-ONLY CTA)
-    # ========================================================================
-    
-    st.divider()
-    new_url = st.text_input("Add new knowledge source (URL or sitemap)")
-    if st.button("Ingest new domain"):
-        st.info(f"Run locally to ingest: DOMAIN_URL={new_url} python ingest.py")
-    st.caption(
-        "Examples: arXiv CS/physics, HuggingFace papers, Lilian Weng blog, "
-        "HN, Interconnects, Latent Space, SeriousEats recipes, Vatican archives, "
-        "Quran, Stanford Encyclopedia, LessWrong sitemaps."
-    )
     
     # ========================================================================
     # ABOUT THE AUTHOR
@@ -564,36 +544,6 @@ with st.sidebar:
     # VISUAL: Shield.io badge for polish
     
     
-    # ========================================================================
-    # ANALYTICS OPT-IN
-    # ========================================================================
-    
-    st.divider()
-    
-    st.checkbox(
-        "Allow anonymous analytics (Umami)",
-        value=st.session_state.analytics_opt_in,
-        key="analytics_opt_in",  # Binds to session state
-        help="Optional: help us track page views. No PII.",
-        # TOOLTIP: Appears on hover
-    )
-    # PRIVACY: Opt-in, not opt-out (GDPR compliant)
-    # TRANSPARENCY: Explains what's tracked
-
-
-# ============================================================================
-# ANALYTICS INJECTION (CONDITIONAL)
-# ============================================================================
-
-if st.session_state.get("analytics_opt_in"):
-    st.markdown(
-        """
-        <script async defer data-website-id="umami-placeholder" src="https://analytics.example.com/script.js"></script>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 # ============================================================================
 # PERFORMANCE MONITORING (OPTIONAL)
 # ============================================================================
