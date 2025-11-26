@@ -3,43 +3,40 @@
 .env.local
 .env.*.local
 
-# Virtual environments
-venv/
-env/
-ENV/
-.venv
-
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-
-# Distribution / packaging
+env/
+venv/
+ENV/
 build/
 dist/
 *.egg-info/
-.eggs/
 
-# IDEs
+# Data & Storage (too large for Git)
+storage/
+data/
+*.jsonl
+*.pkl
+*.bin
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# Data files (can be large)
-
 # Logs
 *.log
-logs/
 
 # Temporary files
 *.tmp
-.cache/
-storage/docstore.json
+temp/
